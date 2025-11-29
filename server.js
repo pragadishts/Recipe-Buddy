@@ -76,7 +76,9 @@ app.post('/api/generateRecipe', async (req, res) => {
     }
 });
 
-app.listen(port, () => {
-    console.log(`Server running securely at http://localhost:${port}`);
-    console.log(`Access the app via: http://localhost:${port}/index.html`);
-});
+// app.listen(port, () => {
+//    console.log(`Server running securely at http://localhost:${port}`);
+//    console.log(`Access the app via: http://localhost:${port}/index.html`);
+// });
+
+module.exports = app;
