@@ -2,7 +2,11 @@
 // server.js (Around lines 10-18)
 
 // ...
-
+// Add this route near the beginning of your server.js
+app.get('/', (req, res) => {
+    // Vercel usually handles this, but this is a fail-safe Express route
+    res.sendFile(__dirname + '/index.html');
+});
 
 const express = require('express');
 const { GoogleGenAI } = require('@google/genai');
