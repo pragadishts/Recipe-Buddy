@@ -1,55 +1,60 @@
 // server.js
-// server.js (Around lines 10-18)
-
-// ...
-// Add this route near the beginning of your server.js
-app.get('/', (req, res) => {
-    // Vercel usually handles this, but this is a fail-safe Express route
-    res.sendFile(__dirname + '/index.html');
-});
 
 const express = require('express');
 const { GoogleGenAI } = require('@google/genai');
-// Load environment variables from .env file
-require('dotenv').config(); 
+
+// --- START: LOCAL DEVELOPMENT CONFIGURATION ---
+// This part is for local testing (reading .env and setting port)
+if (process.env.NODE_ENV !== 'production') {
+    require('dotenv').config(); 
+}
+const port = process.env.PORT || 3000;
+// --- END: LOCAL DEVELOPMENT CONFIGURATION ---
+
 
 const app = express();
-const port = process.env.PORT || 3000;
 
 // Initialize the GoogleGenAI client using the secure environment variable
 const apiKey = process.env.GEMINI_API_KEY;
+
+// 🛑 CRITICAL FIX FOR VERCEL: 
+// REMOVE the process.exit(1) block entirely. 
+// Vercel handles the API Key failure gracefully, but crashing the function 
+// with process.exit(1) leads to the 500 FUNCTION_INVOCATION_FAILED error.
 if (!apiKey) {
-    console.error("FATAL ERROR: GEMINI_API_KEY not found in .env file or environment.");
-    // In a real application, you might want a gentler fallback, but this ensures security.
-    process.exit(1); 
+    console.error("WARNING: GEMINI_API_KEY not found. API calls will fail.");
+    // Do NOT call process.exit(1) here for Vercel.
 }
 const ai = new GoogleGenAI(apiKey);
 
 
-// Middleware to parse incoming JSON request bodies
-app.use(express.json({ limit: '50mb' })); // Increased limit for image data
+// Middleware to parse incoming JSON request bodies (increased limit for image data)
+app.use(express.json({ limit: '50mb' })); 
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 
-// Serve all static files (like index.html, CSS, etc.) from the current directory
-app.use(express.static(__dirname)); 
+// 1. FAIL-SAFE ROOT ROUTE: Ensures the app responds to the base URL (Vercel normally handles this)
+const path = require('path');
+
+app.get('/', (req, res) => {
+    // Send the index.html file from the root directory
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// 2. SERVE STATIC FILES: Vercel will ignore this and serve files directly, but it's good for local testing.
+app.use(express.static(path.join(__dirname))); 
 
 
 // 🔐 SECURE PROXY ENDPOINT: /api/generateRecipe
-// This route securely calls the Gemini API for both text-only (voice) and multimodal (image) requests.
 app.post('/api/generateRecipe', async (req, res) => {
     try {
-        // Extract the data sent from the frontend
         const { prompt, image } = req.body;
-
         const parts = [];
 
-        // 1. Add the text prompt
         if (prompt) {
             parts.push({ text: prompt });
         }
 
-        // 2. Add the image data if it exists (for the main recipe generation)
         if (image && image.data) {
             parts.push({ 
                 inlineData: { 
@@ -59,7 +64,6 @@ app.post('/api/generateRecipe', async (req, res) => {
             });
         }
         
-        // Safety check
         if (parts.length === 0) {
             return res.status(400).json({ error: { message: "No prompt or image data provided." } });
         }
@@ -71,7 +75,6 @@ app.post('/api/generateRecipe', async (req, res) => {
             contents: parts
         });
 
-        // Send the result back to the client
         res.json(response); 
 
     } catch (error) {
@@ -80,9 +83,18 @@ app.post('/api/generateRecipe', async (req, res) => {
     }
 });
 
-// app.listen(port, () => {
-//    console.log(`Server running securely at http://localhost:${port}`);
-//    console.log(`Access the app via: http://localhost:${port}/index.html`);
-// });
 
+// --- START: VERCEL DEPLOYMENT / LOCAL LISTENER ---
+// Only listen to the port if not running on Vercel (i.e., local development)
+if (process.env.NODE_ENV !== 'production') {
+    app.listen(port, () => {
+       console.log(`Server running securely at http://localhost:${port}`);
+       console.log(`Access the app via: http://localhost:${port}/index.html`);
+    });
+}
+
+
+// ✅ CRITICAL FOR VERCEL: Export the application instance for serverless function use.
 module.exports = app;
+
+// --- END: VERCEL DEPLOYMENT / LOCAL LISTENER ---
